@@ -11,6 +11,7 @@ use ratatui::{
 };
 use store::{InstalledModules};
 use modules::pomodoro::{Pomodoro, PomodoroConfig};
+use modules::mood_journal::MoodJournal;
 use std::time::Duration;
 
 fn main() -> Result<()>{
@@ -73,6 +74,7 @@ struct App {
     cursor: usize,
     running: Option<usize>,
     pomodoro: Pomodoro,
+    mood: MoodJournal,
 }
 
 impl App {
@@ -88,11 +90,16 @@ impl App {
             cursor: 0,
             running: None,
             pomodoro: Pomodoro::new(PomodoroConfig::default()),
+            mood: MoodJournal::new(),
         }
     }
 
     fn pomodoro_idx(&self) -> usize {
         self.modules.iter().position(|m| matches! (m, InstalledModules::Pomodoro)).unwrap_or(0)
+    }
+
+    fn mood_idx(&self) -> usize {
+        self.modules.iter().position(|m| matches!(m, InstalledModules::MoodJournal)).unwrap_or(0)
     }
 
     fn tick(&mut self) {
@@ -124,6 +131,10 @@ impl App {
             }
             KeyCode::Char('q') => return true, // quit
             _ => {}
+        }
+        // delegate to mood journal if running
+        if self.running == Some(self.mood_idx()) {
+            if self.mood.handle_key(code) { return false; }
         }
         false
     }
@@ -172,8 +183,12 @@ fn render(frame: &mut Frame, app: &App) {
         };
         card.render(frame, cols[idx + 1]);
 
-        if app.running == Some(idx) && matches!(module, InstalledModules::Pomodoro) {
-            app.pomodoro.render(frame, cols[idx + 1]);
+        if app.running == Some(idx) {
+            match module {
+                InstalledModules::Pomodoro => app.pomodoro.render(frame, cols[idx + 1]),
+                InstalledModules::MoodJournal => app.mood.render(frame, cols[idx + 1]),
+                _ => {},
+            }
         }
     }
 }
