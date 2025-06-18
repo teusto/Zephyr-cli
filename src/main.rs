@@ -1,4 +1,5 @@
 mod store;
+mod modules;
 use color_eyre::Result;
 use crossterm::event::{self, Event, KeyCode};
 use ratatui::{
@@ -9,6 +10,8 @@ use ratatui::{
     style::{Color, Style, Stylize}
 };
 use store::{InstalledModules};
+use modules::pomodoro::{Pomodoro, PomodoroConfig};
+use std::time::Duration;
 
 fn main() -> Result<()>{
     ratatui::restore();
@@ -69,6 +72,7 @@ struct App {
     modules: Vec<InstalledModules>,
     cursor: usize,
     running: Option<usize>,
+    pomodoro: Pomodoro,
 }
 
 impl App {
@@ -83,6 +87,17 @@ impl App {
             ],
             cursor: 0,
             running: None,
+            pomodoro: Pomodoro::new(PomodoroConfig::default()),
+        }
+    }
+
+    fn pomodoro_idx(&self) -> usize {
+        self.modules.iter().position(|m| matches! (m, InstalledModules::Pomodoro)).unwrap_or(0)
+    }
+
+    fn tick(&mut self) {
+        if self.running == Some(self.pomodoro_idx()) {
+            self.pomodoro.tick();
         }
     }
 
@@ -97,6 +112,16 @@ impl App {
             KeyCode::Char('p') => {
                 self.running = Some(self.cursor);
             }
+            KeyCode::Char('s') => {
+                if self.running == Some(self.pomodoro_idx()) {
+                    self.pomodoro.start();
+                }
+            }
+            KeyCode::Char('r') => {
+                if self.running == Some(self.pomodoro_idx()) {
+                    self.pomodoro.reset();
+                }
+            }
             KeyCode::Char('q') => return true, // quit
             _ => {}
         }
@@ -110,11 +135,15 @@ fn run(mut terminal: DefaultTerminal) -> Result<()> {
     loop {
         terminal.draw(|f| render(f, &app))?;
 
-        if let Event::Key(key) = event::read()? {
-            if app.on_key(key.code) {
-                break Ok(());
-            }
+        if event::poll(Duration::from_millis(200))? {
+            if let Event::Key(key) = event::read()? {
+                if app.on_key(key.code) {
+                    break Ok(());
+                }
+            }   
         }
+
+        app.tick();
     }
 }
 
@@ -142,6 +171,10 @@ fn render(frame: &mut Frame, app: &App) {
             running: app.running == Some(idx),
         };
         card.render(frame, cols[idx + 1]);
+
+        if app.running == Some(idx) && matches!(module, InstalledModules::Pomodoro) {
+            app.pomodoro.render(frame, cols[idx + 1]);
+        }
     }
 }
 
